@@ -1,0 +1,32 @@
+{
+  "address": ":8080",
+  "root": "/srv/www",
+  "probes": {
+    "liveness_path": "/livez",
+    "readiness_path": "/readyz"
+  },
+  "metrics": {
+    "address": ":9090",
+    "path": "/metrics"
+  },
+  "access_log": false,
+  "headers": {
+    "Cache-Control": "public, max-age=3600",
+    "X-Content-Type-Options": "nosniff"
+  },
+  "header_rules": [
+    { "match": "*.html", "headers": { "Cache-Control": "no-cache" } },
+    { "match": "/assets/*", "headers": { "Cache-Control": "public, max-age=31536000, immutable" } }
+  ],
+  "fallback": "",
+  "not_found_page": "",
+  "precompressed": false,
+  "timeouts": {
+    "read_header": "5s",
+    "read": "10s",
+    "write": "60s",
+    "idle": "120s",
+    "shutdown": "15s",
+    "drain": "5s"
+  }
+}

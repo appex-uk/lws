@@ -1,0 +1,5 @@
+bin/
+*_test.go
+Makefile
+Dockerfile
+.dockerignore

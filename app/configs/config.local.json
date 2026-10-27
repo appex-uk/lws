@@ -1,0 +1,8 @@
+{
+  "address": ":8080",
+  "root": "www",
+  "access_log": true,
+  "timeouts": {
+    "drain": "0s"
+  }
+}
