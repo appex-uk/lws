@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"configs"
+	"github.com/appex-uk/lws/configs"
 )
 
 func newTestApp(t *testing.T, mutate func(*configs.Config)) (*App, string, chan error) {
