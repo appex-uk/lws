@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"configs"
-	"pkg"
-	"pkg/integration"
+	"github.com/appex-uk/lws/configs"
+	"github.com/appex-uk/lws/pkg"
+	"github.com/appex-uk/lws/pkg/integration"
 )
 
 func main() {

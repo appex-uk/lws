@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"configs"
-	"pkg/business/static"
-	"pkg/integration"
+	"github.com/appex-uk/lws/configs"
+	"github.com/appex-uk/lws/pkg/business/static"
+	"github.com/appex-uk/lws/pkg/integration"
 )
 
 type App struct {
