@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"app/configs"
-	"app/pkg/business/static"
-	"app/pkg/integration"
+	"configs"
+	"pkg/business/static"
+	"pkg/integration"
 )
 
 type App struct {

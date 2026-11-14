@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-// Version is set at build time with -ldflags "-X app/pkg/integration.Version=...".
+// Version is set at build time with -ldflags "-X pkg/integration.Version=...".
 var Version = "dev"
 
 // durationBuckets are the upper bounds (seconds) of the request latency histogram.

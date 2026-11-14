@@ -1,6 +1,6 @@
 IMAGE ?= lws:latest
 VERSION ?= dev
-LDFLAGS := -s -w -X app/pkg/integration.Version=$(VERSION)
+LDFLAGS := -s -w -X pkg/integration.Version=$(VERSION)
 
 .PHONY: build test bench lint run docker docker-run clean
 

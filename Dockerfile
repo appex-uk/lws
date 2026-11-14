@@ -4,7 +4,7 @@ WORKDIR /src
 COPY go.mod ./
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath \
-    -ldflags="-s -w -X app/pkg/integration.Version=${VERSION}" -o /out/lws .
+    -ldflags="-s -w -X pkg/integration.Version=${VERSION}" -o /out/lws .
 
 FROM scratch
 COPY --from=build /out/lws /lws

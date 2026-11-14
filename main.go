@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"os"
 
-	"app/configs"
-	"app/pkg"
-	"app/pkg/integration"
+	"configs"
+	"pkg"
+	"pkg/integration"
 )
 
 func main() {
