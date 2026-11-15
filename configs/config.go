@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -30,6 +31,57 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 
 func (d Duration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(time.Duration(d).String())
+}
+
+// Size is a byte count that unmarshals from a JSON number or a string such as
+// "64MiB" (KiB/MiB/GiB are powers of 1024; KB/MB/GB are powers of 1000).
+type Size int64
+
+var sizeUnits = []struct {
+	suffix string
+	mult   int64
+}{
+	{"gib", 1 << 30}, {"mib", 1 << 20}, {"kib", 1 << 10},
+	{"gb", 1e9}, {"mb", 1e6}, {"kb", 1e3}, {"b", 1},
+}
+
+func (s *Size) UnmarshalJSON(b []byte) error {
+	var n int64
+	if err := json.Unmarshal(b, &n); err == nil {
+		*s = Size(n)
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(b, &str); err != nil {
+		return errors.New("size must be a number of bytes or a string like \"64MiB\"")
+	}
+	str = strings.ToLower(strings.TrimSpace(str))
+	mult := int64(1)
+	for _, u := range sizeUnits {
+		if strings.HasSuffix(str, u.suffix) {
+			str, mult = strings.TrimSpace(strings.TrimSuffix(str, u.suffix)), u.mult
+			break
+		}
+	}
+	v, err := strconv.ParseInt(str, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid size: %w", err)
+	}
+	*s = Size(v * mult)
+	return nil
+}
+
+// Cache configures the in-memory file cache. A zero MaxSize disables it.
+type Cache struct {
+	// MaxSize bounds the total size of cached file contents.
+	MaxSize Size `json:"max_size"`
+	// MaxEntrySize is the largest file cached (default: MaxSize).
+	MaxEntrySize Size `json:"max_entry_size"`
+	// TTL is how long a file is served from memory before being reloaded
+	// from disk; zero keeps it until evicted.
+	TTL Duration `json:"ttl"`
+	// Eviction picks what to drop when full: "fifo", "lifo" or "largest".
+	Eviction string `json:"eviction"`
 }
 
 type Timeouts struct {
@@ -76,6 +128,7 @@ type Config struct {
 	NotFoundPage string `json:"not_found_page"`
 	// Precompressed serves "<file>.br"/"<file>.gz" siblings when accepted.
 	Precompressed bool     `json:"precompressed"`
+	Cache         Cache    `json:"cache"`
 	Timeouts      Timeouts `json:"timeouts"`
 }
 
@@ -98,6 +151,7 @@ func Default() Config {
 			Address: ":9090",
 			Path:    "/metrics",
 		},
+		Cache: Cache{Eviction: "fifo", TTL: Duration(5 * time.Minute)},
 		Timeouts: Timeouts{
 			ReadHeader: Duration(5 * time.Second),
 			Read:       Duration(10 * time.Second),
@@ -165,6 +219,14 @@ func (c Config) Validate() error {
 			strings.Contains(p, "/.")) {
 			errs = append(errs, fmt.Errorf("%s must be a clean file path starting with /, e.g. /index.html", name))
 		}
+	}
+	switch c.Cache.Eviction {
+	case "fifo", "lifo", "largest":
+	default:
+		errs = append(errs, fmt.Errorf("cache.eviction must be fifo, lifo or largest, got %q", c.Cache.Eviction))
+	}
+	if c.Cache.MaxSize < 0 || c.Cache.MaxEntrySize < 0 || c.Cache.TTL < 0 {
+		errs = append(errs, errors.New("cache.max_size, cache.max_entry_size and cache.ttl must not be negative"))
 	}
 	t := c.Timeouts
 	for name, d := range map[string]Duration{

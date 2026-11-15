@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -46,12 +47,23 @@ func NewApp(cfg configs.Config) (*App, error) {
 	for i, r := range cfg.HeaderRules {
 		rules[i] = static.HeaderRule{Match: r.Match, Headers: r.Headers}
 	}
+	cache, err := static.NewCache(static.CacheOptions{
+		MaxBytes:      int64(cfg.Cache.MaxSize),
+		MaxEntryBytes: int64(cfg.Cache.MaxEntrySize),
+		TTL:           time.Duration(cfg.Cache.TTL),
+		Eviction:      static.Eviction(cfg.Cache.Eviction),
+	})
+	if err != nil {
+		root.Close()
+		return nil, err
+	}
 	files, err := static.NewHandler(root, static.Options{
 		Headers:       cfg.Headers,
 		Rules:         rules,
 		Fallback:      cfg.Fallback,
 		NotFoundPage:  cfg.NotFoundPage,
 		Precompressed: cfg.Precompressed,
+		Cache:         cache,
 	})
 	if err != nil {
 		root.Close()
@@ -62,6 +74,9 @@ func NewApp(cfg configs.Config) (*App, error) {
 	var m *integration.Metrics
 	if cfg.Metrics.Address != "" {
 		m = integration.NewMetrics()
+		if cache != nil {
+			m.AddCollector(func(b *bytes.Buffer) { writeCacheMetrics(b, cache.Stats()) })
+		}
 		metricsMux := http.NewServeMux()
 		metricsMux.Handle("GET "+cfg.Metrics.Path, m)
 		a.metricsServer = &http.Server{
@@ -105,6 +120,21 @@ func probeResponse(w http.ResponseWriter, status int, body string) {
 	h.Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	io.WriteString(w, body)
+}
+
+func writeCacheMetrics(b *bytes.Buffer, s static.CacheStats) {
+	for _, m := range []struct {
+		name, typ, help string
+		v               float64
+	}{
+		{"lws_cache_hits_total", "counter", "File cache hits.", float64(s.Hits)},
+		{"lws_cache_misses_total", "counter", "File cache misses.", float64(s.Misses)},
+		{"lws_cache_evictions_total", "counter", "Entries evicted to make room.", float64(s.Evictions)},
+		{"lws_cache_entries", "gauge", "Files currently cached.", float64(s.Entries)},
+		{"lws_cache_bytes", "gauge", "Bytes currently cached.", float64(s.Bytes)},
+	} {
+		fmt.Fprintf(b, "# HELP %s %s\n# TYPE %s %s\n%s %v\n", m.name, m.help, m.name, m.typ, m.name, m.v)
+	}
 }
 
 // Handler exposes the root handler (useful for tests).

@@ -41,6 +41,13 @@ type Metrics struct {
 	buckets  [len(durationBuckets) + 1]atomic.Uint64
 	durCount atomic.Uint64
 	durSumNs atomic.Uint64
+	// collectors append extra metrics to the exposition output.
+	collectors []func(*bytes.Buffer)
+}
+
+// AddCollector registers fn to write extra metrics. Call before serving.
+func (m *Metrics) AddCollector(fn func(*bytes.Buffer)) {
+	m.collectors = append(m.collectors, fn)
 }
 
 func NewMetrics() *Metrics {
@@ -134,6 +141,10 @@ func (m *Metrics) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprintf(&b, "lws_http_request_duration_seconds_bucket{le=\"+Inf\"} %d\n", cum)
 	fmt.Fprintf(&b, "lws_http_request_duration_seconds_sum %s\n", formatFloat(time.Duration(m.durSumNs.Load()).Seconds()))
 	fmt.Fprintf(&b, "lws_http_request_duration_seconds_count %d\n", cum)
+
+	for _, c := range m.collectors {
+		c(&b)
+	}
 
 	writeRuntimeMetrics(&b)
 	writeProcessMetrics(&b, m.start)

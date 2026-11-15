@@ -2,6 +2,7 @@
 package static
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +34,8 @@ type Options struct {
 	NotFoundPage string
 	// Precompressed serves "<file>.br" / "<file>.gz" when the client accepts them.
 	Precompressed bool
+	// Cache keeps file contents in memory; nil serves everything from disk.
+	Cache *Cache
 }
 
 type rule struct {
@@ -48,6 +51,7 @@ type handler struct {
 	fallback      string
 	notFoundPage  string
 	precompressed bool
+	cache         *Cache
 }
 
 // NewHandler serves GET/HEAD requests from root. Configured fallback and
@@ -60,6 +64,7 @@ func NewHandler(root *os.Root, opts Options) (http.Handler, error) {
 		fallback:      strings.TrimPrefix(opts.Fallback, "/"),
 		notFoundPage:  strings.TrimPrefix(opts.NotFoundPage, "/"),
 		precompressed: opts.Precompressed,
+		cache:         opts.Cache,
 	}
 	for _, r := range opts.Rules {
 		if _, err := path.Match(r.Match, ""); err != nil {
@@ -113,6 +118,14 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// "/index.html" is left to http.FileServer so it can redirect to "/".
 	if h.precompressed && !strings.HasSuffix(upath, "/index.html") && h.serveEncoded(w, r, name) {
 		return
+	}
+
+	if h.cache != nil && !strings.HasSuffix(upath, "/index.html") {
+		if e, ok := h.cached(name); ok {
+			h.setHeaders(w.Header(), name)
+			http.ServeContent(w, r, name, e.modTime, bytes.NewReader(e.data))
+			return
+		}
 	}
 
 	// Existence is only checked when it changes the outcome, so the default
@@ -195,6 +208,14 @@ func (h *handler) serveEncoded(w http.ResponseWriter, r *http.Request, name stri
 		if !acceptsEncoding(ae, enc.token) {
 			continue
 		}
+		if e, ok := h.cached(name + enc.ext); ok {
+			hdr := w.Header()
+			h.setHeaders(hdr, name)
+			hdr.Set("Content-Type", ctype)
+			hdr.Set("Content-Encoding", enc.token)
+			http.ServeContent(w, r, name, e.modTime, bytes.NewReader(e.data))
+			return true
+		}
 		f, info, ok := h.openRegular(name + enc.ext)
 		if !ok {
 			continue
@@ -232,6 +253,31 @@ func acceptsEncoding(header, token string) bool {
 	return false
 }
 
+// cached returns a regular file's contents, loading them into the cache on a
+// miss. ok is false when caching is off, or the file is missing, not regular
+// or too large to cache; callers then serve from disk.
+func (h *handler) cached(name string) (*entry, bool) {
+	if h.cache == nil {
+		return nil, false
+	}
+	if e, ok := h.cache.get(name); ok {
+		return e, true
+	}
+	f, info, ok := h.openRegular(name)
+	if !ok {
+		return nil, false
+	}
+	defer f.Close()
+	if !h.cache.cacheable(info.Size()) {
+		return nil, false
+	}
+	data, err := io.ReadAll(io.LimitReader(f, info.Size()+1))
+	if err != nil || int64(len(data)) != info.Size() {
+		return nil, false
+	}
+	return h.cache.put(name, data, info.ModTime()), true
+}
+
 func (h *handler) openRegular(name string) (*os.File, fs.FileInfo, bool) {
 	f, err := h.root.Open(name)
 	if err != nil {
@@ -256,6 +302,24 @@ func (h *handler) notFound(w http.ResponseWriter, r *http.Request) {
 // serveFile serves a configured page. 200 responses support conditional and
 // range requests; other statuses are sent as-is and never cached.
 func (h *handler) serveFile(w http.ResponseWriter, r *http.Request, name string, status int) {
+	if e, ok := h.cached(name); ok {
+		hdr := w.Header()
+		h.setHeaders(hdr, name)
+		if status == http.StatusOK {
+			http.ServeContent(w, r, name, e.modTime, bytes.NewReader(e.data))
+			return
+		}
+		hdr.Set("Cache-Control", "no-store")
+		if ctype := mime.TypeByExtension(path.Ext(name)); ctype != "" {
+			hdr.Set("Content-Type", ctype)
+		}
+		hdr.Set("Content-Length", fmt.Sprint(len(e.data)))
+		w.WriteHeader(status)
+		if r.Method != http.MethodHead {
+			w.Write(e.data)
+		}
+		return
+	}
 	f, info, ok := h.openRegular(name)
 	if !ok {
 		http.NotFound(w, r)

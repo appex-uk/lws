@@ -28,6 +28,10 @@ Pass a file with `-config path/to/config.json`. Any field you leave out keeps it
 | `fallback`           | `""`       | File served with 200 for missing routes (SPAs), e.g. `/index.html` |
 | `not_found_page`     | `""`       | File served with 404 for missing files, e.g. `/404.html` |
 | `precompressed`      | `false`    | Serve `<file>.br` / `<file>.gz` when accepted      |
+| `cache.max_size`     | `0`        | Max total bytes cached in memory (`"64MiB"` or bytes); `0` disables |
+| `cache.max_entry_size` | `max_size` | Largest file cached; bigger files are read from disk |
+| `cache.ttl`          | `5m`       | Time before a cached file is reloaded from disk; `0s` = until evicted |
+| `cache.eviction`     | `fifo`     | When full, drop the `fifo` (oldest), `lifo` (newest) or `largest` entry |
 | `timeouts.read_header` | `5s`     | Go duration strings                                |
 | `timeouts.read`      | `10s`      |                                                    |
 | `timeouts.write`     | `60s`      | Raise this if you serve very large files           |
@@ -36,6 +40,10 @@ Pass a file with `-config path/to/config.json`. Any field you leave out keeps it
 | `timeouts.drain`     | `5s`       | Time readiness reports 503 before shutdown starts  |
 
 See [configs/config.json](configs/config.json). Configured `fallback` and `not_found_page` files must exist at startup.
+
+### Memory cache
+
+With `cache.max_size > 0`, files (including precompressed siblings and the fallback/404 pages) are served from memory after the first load. Disk changes are only picked up once `cache.ttl` expires, so keep it short for content that changes in place. Metrics: `lws_cache_{hits,misses,evictions}_total`, `lws_cache_{entries,bytes}`.
 
 ### Header rules
 

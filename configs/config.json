@@ -21,6 +21,12 @@
   "fallback": "",
   "not_found_page": "",
   "precompressed": false,
+  "cache": {
+    "max_size": "0",
+    "max_entry_size": "1MiB",
+    "ttl": "5m",
+    "eviction": "fifo"
+  },
   "timeouts": {
     "read_header": "5s",
     "read": "10s",

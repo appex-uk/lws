@@ -4,5 +4,11 @@
   "access_log": true,
   "timeouts": {
     "drain": "0s"
+  },
+  "cache": {
+    "max_size": "64MiB",
+    "max_entry_size": "1MiB",
+    "ttl": "1m",
+    "eviction": "fifo"
   }
 }
